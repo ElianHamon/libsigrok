@@ -598,6 +598,12 @@ src_libdrivers_la_SOURCES += \
 	src/hardware/raspberrypi-pico/protocol.c \
 	src/hardware/raspberrypi-pico/api.c
 endif
+if HW_RASPBERRY_PI_1_4
+src_libdrivers_la_SOURCES += \
+	src/hardware/raspberry-pi-1-4/protocol.h \
+	src/hardware/raspberry-pi-1-4/protocol.c \
+	src/hardware/raspberry-pi-1-4/api.c
+endif
 if HW_RDTECH_DPS
 src_libdrivers_la_SOURCES += \
 	src/hardware/rdtech-dps/protocol.h \
