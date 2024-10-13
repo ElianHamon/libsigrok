@@ -28,6 +28,7 @@
 #define LOG_PREFIX "raspberry-pi-1-4"
 
 struct dev_context {
+    uint64_t sample_rate;
 };
 
 SR_PRIV int raspberry_pi_1_4_receive_data(int fd, int revents, void *cb_data);

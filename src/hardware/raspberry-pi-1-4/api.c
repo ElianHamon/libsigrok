@@ -23,6 +23,27 @@
 
 #include <stdio.h>
 
+static const uint32_t scanopts[] = {
+};
+
+static const uint32_t drvopts[] = {
+	SR_CONF_LOGIC_ANALYZER,
+};
+
+static const uint32_t devopts[] = {
+	SR_CONF_SAMPLERATE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
+};
+
+/* Sample rate can either provide a std_gvar_samplerates_steps or a
+ * std_gvar_samplerates. The latter is just a long list of every supported rate.
+ * For the steps, pulseview/pv/toolbars/mainbar.cpp will do a min,max,step. If
+ * step is 1 then it provides a 1,2,5,10 select otherwise it allows a spin box.
+ * Going with the full list because while the spin box is more flexible, it is
+ * harder to read */
+static const uint64_t samplerates[] = {
+	SR_MHZ(6),
+};
+
 static struct sr_dev_driver raspberry_pi_1_4_driver_info;
 
 /** @brief Checks that the hardware has a BCM283* CPU and /dev/gpiomem.
@@ -36,6 +57,7 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 {
 	GSList* device = NULL;
 	struct sr_dev_inst* sdi;
+	struct dev_context* devc;
 
 	(void)di;
 	(void)options;
@@ -94,6 +116,12 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 	sdi->driver = &raspberry_pi_1_4_driver_info;
 	sdi->inst_type = SR_INST_USER;
 	sdi->serial_num = g_strdup("N/A");
+
+	devc = g_malloc0(sizeof(struct dev_context));
+	devc->sample_rate = samplerates[0];
+
+	sdi->priv = devc;
+
 	device = std_scan_complete(di, g_slist_append(NULL, sdi));
 
 end:
@@ -128,64 +156,67 @@ static int dev_close(struct sr_dev_inst *sdi)
 static int config_get(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
-	int ret;
-
-	(void)sdi;
-	(void)data;
 	(void)cg;
+
+	struct dev_context* devc = sdi->priv;
 
 	sr_dbg("config_get");
 
-	ret = SR_OK;
 	switch (key) {
-	/* TODO */
+	case SR_CONF_SAMPLERATE:
+		*data = g_variant_new_uint64(devc->sample_rate);
+		break;
+
 	default:
 		return SR_ERR_NA;
 	}
 
-	return ret;
+	return SR_OK;
 }
 
 static int config_set(uint32_t key, GVariant *data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
-	int ret;
-
-	(void)sdi;
-	(void)data;
 	(void)cg;
+
+	struct dev_context* devc = sdi->priv;
 
 	sr_dbg("config_set");
 
-	ret = SR_OK;
 	switch (key) {
-	/* TODO */
+	case SR_CONF_SAMPLERATE:
+		devc->sample_rate = g_variant_get_uint64(data);
+		sr_dbg("config_set sr %"PRIu64"\n", devc->sample_rate);
+		break;
+
 	default:
-		ret = SR_ERR_NA;
+		return SR_ERR_NA;
 	}
 
-	return ret;
+	return SR_OK;
 }
 
 static int config_list(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
-	int ret;
-
-	(void)sdi;
-	(void)data;
-	(void)cg;
+	/* Scan or device options are the only ones that can be called without a
+	 * defined instance */
+	if ((key == SR_CONF_SCAN_OPTIONS) || (key == SR_CONF_DEVICE_OPTIONS)) {
+		return STD_CONFIG_LIST(key, data, sdi, cg, scanopts, drvopts, devopts);
+	}
 
 	sr_dbg("config_list");
 
-	ret = SR_OK;
 	switch (key) {
-	/* TODO */
+	case SR_CONF_SAMPLERATE:
+		*data = std_gvar_samplerates(ARRAY_AND_SIZE(samplerates));
+		break;
+
 	default:
 		return SR_ERR_NA;
 	}
 
-	return ret;
+	return SR_OK;
 }
 
 static int dev_acquisition_start(const struct sr_dev_inst *sdi)
