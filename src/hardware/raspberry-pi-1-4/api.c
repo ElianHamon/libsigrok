@@ -16,75 +16,91 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#define _GNU_SOURCE
 
 #include <config.h>
 #include "protocol.h"
 
-#define _GNU_SOURCE
 #include <stdio.h>
 
 static struct sr_dev_driver raspberry_pi_1_4_driver_info;
 
 /** @brief Checks that the hardware has a BCM283* CPU and /dev/gpiomem.
  * @return -1 on error, 0 on success.
+ *
+ * Here you need to fill a new struct sr_dev_inst for every device discovered, and make a GSList of them.
+ * Then you add them to the drv_context->instances from di->context.
+ * You can use the std_scan_complete helper.
  */
-static int is_raspberry_pi_1_4()
+static GSList *scan(struct sr_dev_driver *di, GSList *options)
 {
-	int ret = -1;
+	GSList* device = NULL;
+	struct sr_dev_inst* sdi;
+
+	(void)di;
+	(void)options;
+
+	FILE* dev_gpiomem = fopen("/dev/gpiomem", "r+b");
+	if (dev_gpiomem == NULL) {
+		sr_err("/dev/gpiomem does not exists");
+		return NULL;
+	}
+	fclose(dev_gpiomem);
+
 	FILE* cpuinfo = fopen("/proc/cpuinfo", "rb");
-	if(cpuinfo == NULL)
-		return -1;
+	if(cpuinfo == NULL) {
+		sr_err("Can't read /proc/cpuinfo");
+		return NULL;
+	}
 
 	char* arg = NULL;
+	char* model = NULL;
 	size_t size = 0;
-	while(getdelim(&arg, &size, 0, cpuinfo) != -1)
+	// Parse cpuinfo to get hardware model.
+	while(getline(&arg, &size, cpuinfo) >= 0)
 	{
 //		sr_dbg("%s", arg);
-		if(strstr(arg, "Hardware") != NULL)
-		{
-			const char* bcm = strstr(arg, "BCM283");
-			if(bcm == NULL)
-				goto end; // Not a raspberry pi CPU.
-
-//			size_t index = bcm - arg;
-			sr_dbg("CPU: %s", bcm);
-		}
+// 		if(strstr(arg, "Hardware") != NULL)
+// 		{
+// 			const char* bcm = strstr(arg, "BCM283");
+// 			if(bcm == NULL) {
+// 				sr_err("Not a BCM283X CPU");
+// 				goto end;
+// 			}
+//
+// //			size_t index = bcm - arg;
+// 			sr_info("CPU: %s", bcm);
+// 		}
 
 		if(strstr(arg, "Model") != NULL)
 		{
 			const char* rpi = strstr(arg, "Raspberry Pi");
-			if(rpi == NULL)
-				goto end; // Not a raspberry pi.
+			if(rpi == NULL) {
+				sr_err("Not a Raspberry Pi");
+				goto end;
+			}
 
-			sr_dbg("Model: %s", rpi);
+			model = g_strdup(rpi);
+			sr_info("Model: %s", rpi);
 		}
 	}
-	ret = 0;
+
+	sdi = g_malloc0(sizeof(struct sr_dev_inst));
+	sdi->status = SR_ST_INACTIVE;
+	sdi->vendor = g_strdup("Raspberry Pi");
+	sdi->model = model;
+	sdi->version = g_strdup("00");
+	sdi->conn = NULL; // No connection since it's the same machine.
+	sdi->driver = &raspberry_pi_1_4_driver_info;
+	sdi->inst_type = SR_INST_USER;
+	sdi->serial_num = g_strdup("N/A");
+	device = std_scan_complete(di, g_slist_append(NULL, sdi));
 
 end:
 	free(arg);
 	fclose(cpuinfo);
-	return ret;
-}
 
-static GSList *scan(struct sr_dev_driver *di, GSList *options)
-{
-	GSList *devices = NULL;
-
-	(void)options;
-
-	struct drv_context *drvc = di->context;
-	drvc->instances = NULL;
-
-	sr_dbg("scan");
-
-	if(is_raspberry_pi_1_4() < 0)
-		return NULL;
-
-	/* TODO: scan for devices, either based on a SR_CONF_CONN option
-	 * or on a USB scan. */
-
-	return devices;
+	return device;
 }
 
 static int dev_open(struct sr_dev_inst *sdi)
